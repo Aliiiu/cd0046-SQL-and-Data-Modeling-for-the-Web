@@ -31,13 +31,6 @@ app.config.from_object('config')
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-# # TODO: connect to a local postgresql database
-# app.config['SQLALCHEMY_DATABASE_URI'] = config.SQLALCHEMY_DATABASE_URI
-
-# #----------------------------------------------------------------------------#
-# # Models.
-# #----------------------------------------------------------------------------#
-
 # TODO: connect to a local postgresql database
 app.config['SQLALCHEMY_DATABASE_URI'] = config.SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = config.SQLALCHEMY_TRACK_MODIFICATIONS
@@ -336,14 +329,14 @@ def show_artist(artist_id):
       prev_shows.append(data)
 
   
-  def parse_genres(genres = artist.genres):
-    result = []
-    if len(genres) == 0:
-      return []
-    if genres[0] == '{':
-      new_genres = genres[1:-1].split(',')
-    for genre in new_genres:
-      result.append(genre)
+  # def parse_genres(genres = artist.genres):
+  #   result = []
+  #   if len(genres) == 0:
+  #     return []
+  #   if genres[0] == '{':
+  #     new_genres = genres[1:-1].split(',')
+  #   for genre in new_genres:
+  #     result.append(genre)
 
   print(artist.genres)
 
