@@ -10,99 +10,41 @@ import babel
 import dateutil.parser
 from flask import (Flask, Response, flash, redirect, render_template, request,
                    url_for)
-from flask_migrate import Migrate
+from flask_migrate import Migrate, MigrateCommand
 from flask_moment import Moment
+from flask_script import Manager
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import Form
-from sqlalchemy import true
 
 import config
 from forms import *
 
-# from models import Artist, Show, Venue
-
-#----------------------------------------------------------------------------#
-# App Config.
-#----------------------------------------------------------------------------#
-
 app = Flask(__name__)
-moment = Moment(app)
 app.config.from_object('config')
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
+
 
 # TODO: connect to a local postgresql database
 app.config['SQLALCHEMY_DATABASE_URI'] = config.SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = config.SQLALCHEMY_TRACK_MODIFICATIONS
-#----------------------------------------------------------------------------#
-# Models.
-#----------------------------------------------------------------------------#
+# from core import app
+
+from models import Artist, Show, Venue, db
 
 migrate = Migrate(app, db)
-class Venue(db.Model):
-    __tablename__ = 'venues'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String, nullable=False)
-    city = db.Column(db.String(120), nullable=False)
-    state = db.Column(db.String(120), nullable=False)
-    address = db.Column(db.String(120), nullable=False)
-    phone = db.Column(db.String(120), nullable=False)
-    image_link = db.Column(db.String, nullable=False)
-    facebook_link = db.Column(db.String(120))
-    seeking_talent = db.Column(db.Boolean, default=False, nullable=False)
-    seeking_description = db.Column(db.String, nullable=False)
-    genres = db.Column(db.ARRAY(db.String), nullable=False)
-    website = db.Column(db.String(120), nullable=False)
-    shows = db.relationship('Show', backref='venue', cascade='all, delete-orphan', lazy=True)
-
-    def __repr__(self):
-      return f"<Venue {self.id} name:{self.name} "
-
-    # TODO: implement any missing fields, as a database migration using Flask-Migrate
-
-class Artist(db.Model):
-    __tablename__ = 'artists'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String, nullable=False)
-    city = db.Column(db.String(120), nullable=False)
-    state = db.Column(db.String(120), nullable=False)
-    phone = db.Column(db.String(120), nullable=False)
-    genres = db.Column(db.ARRAY(db.String), nullable=False)
-    image_link = db.Column(db.String, nullable=False)
-    facebook_link = db.Column(db.String(120))
-    seeking_venue = db.Column(db.Boolean, default=False)
-    seeking_description = db.Column(db.String(), default='')
-    website = db.Column(db.String(120))
-    shows = db.relationship('Show', backref='artist', lazy=True)
-
-    def __repr__(self):
-      return f"<Venue {self.id} name:{self.name} "
-        
-
-    # TODO: implement any missing fields, as a database migration using Flask-Migrate
-
-# TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.
-
-class Show(db.Model):
-  __tablename__ = 'shows'
-
-  id = db.Column(db.Integer, primary_key=True)
-  artist_id = db.Column(db.Integer, db.ForeignKey('artists.id'), nullable=False)
-  venue_id = db.Column(db.Integer, db.ForeignKey('venues.id'), nullable=False)
-  start_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-
-  def __repr__(self):
-      return f"<Venue {self.id}, Artist {self.artist_id}, Venue{self.venue_id} "
-
+moment = Moment(app)
+manager = Manager(app)
+manager.add_command('db', MigrateCommand)
 
 #----------------------------------------------------------------------------#
 # Filters.
 #----------------------------------------------------------------------------#
 
 def format_datetime(value, format='medium'):
-  date = dateutil.parser.parse(value)
+  if isinstance(value, str):
+        date = dateutil.parser.parse(value)
+  else:
+      date = value
+  # date = dateutil.parser.parse(value)
   if format == 'full':
       format="EEEE MMMM, d, y 'at' h:mma"
   elif format == 'medium':
@@ -160,7 +102,7 @@ def venues():
           'name': venue.name,
           'num_upcoming_shows': upcoming_shows
         })
-  return render_template('pages/venues.html', areas=data);
+  return render_template('pages/venues.html', areas=data)
 
 @app.route('/venues/search', methods=['POST'])
 def search_venues():
@@ -181,25 +123,33 @@ def show_venue(venue_id):
   # shows the venue page with the given venue_id
   # TODO: replace with real venue data from the venues table, using venue_id
   venue = Venue.query.get(venue_id)
-  shows = Show.query.filter_by(venue_id=venue_id).all()
-  prev_shows = []
-  upcoming_shows = []
-  curr_time = datetime.now()  
-
-  for show in shows:
-    show_data = {
-      'artist_id': show.artist_id,
-      'artist_name': show.artist.name,
-      'artist_image_link': show.artist.image_link,
-      'start_time': format_datetime(str(show.start_time))
-    }
-
-    if show.start_time > curr_time:
-      upcoming_shows.append(show_data)
-    else: 
-      prev_shows.append(show_data)
+  curr_time = datetime.today()
   
-  data = {
+  raw_upcoming_shows = db.session.query(Show).join(Venue).filter(Show.venue_id==venue_id).filter(Show.start_time> curr_time).all()
+  upcoming_shows_count = db.session.query(Show).join(Venue).filter(Show.venue_id==venue_id).filter(Show.start_time> curr_time).count()
+  raw_past_shows = db.session.query(Show).join(Venue).filter(Show.venue_id==venue_id).filter(Show.start_time< curr_time).all()
+  prev_shows_count = db.session.query(Show).join(Venue).filter(Show.venue_id==venue_id).filter(Show.start_time< curr_time).count()
+
+  upcoming_shows = []
+  prev_shows = []
+  #
+  for show in raw_upcoming_shows:
+    temp = {
+        "artist_id": show.artist.id,
+        "artist_name": show.artist.name,
+        "artist_image_link": show.artist.image_link,
+        "start_time": show.start_time,
+    }
+    upcoming_shows.append(temp)
+  for show in raw_past_shows:
+    temp = {
+        "artist_id": show.artist.id,
+        "artist_name": show.artist.name,
+        "artist_image_link": show.artist.image_link,
+        "start_time": show.start_time,
+    }
+    prev_shows.append(temp)
+  show_data = {
     "id": venue.id,
     "name": venue.name,
     "genres": venue.genres,
@@ -214,10 +164,10 @@ def show_venue(venue_id):
     "image_link": venue.image_link,
     "past_shows": prev_shows,
     "upcoming_shows": upcoming_shows,
-    "past_shows_count": len(prev_shows),
-    "upcoming_shows_count": len(upcoming_shows)
+    "past_shows_count": prev_shows_count,
+    "upcoming_shows_count": upcoming_shows_count
   }
-  return render_template('pages/show_venue.html', venue=data)
+  return render_template('pages/show_venue.html', venue=show_data)
 
 #  Create Venue
 #  ----------------------------------------------------------------
@@ -579,7 +529,7 @@ if not app.debug:
 
 # Default port:
 if __name__ == '__main__':
-    app.run()
+    manager.run()
 
 # Or specify port manually:
 '''
